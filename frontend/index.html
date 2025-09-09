@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PDF Study Platform — RAG-ready</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Mobile toggles (pure CSS hamburger) -->
+  <input type="checkbox" id="toggle-sidebar" class="visually-hidden" />
+  <input type="checkbox" id="toggle-chat" class="visually-hidden" />
+
+  <header class="app-header">
+    <div class="left">
+      <label for="toggle-sidebar" class="icon-btn only-mobile" aria-label="Toggle sidebar">☰</label>
+      <a class="brand" href="#">Study<span>PDF</span></a>
+    </div>
+    <div class="center">
+      <form class="search">
+        <input type="search" placeholder="Search documents or topics…" aria-label="Search" />
+      </form>
+    </div>
+    <div class="right">
+      <button class="btn ghost">Login</button>
+      <label for="toggle-chat" class="icon-btn only-mobile" aria-label="Toggle chat">💬</label>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <!-- Sidebar: subjects & files -->
+    <aside class="sidebar">
+      <div class="section">
+        <h3>Subjects</h3>
+        <ul class="list">
+          <li class="active">Computer Programming</li>
+          <li>Data Structures</li>
+          <li>Algorithms</li>
+          <li>Operating Systems</li>
+          <li>Databases</li>
+        </ul>
+      </div>
+      <div class="section">
+        <h3>Files</h3>
+        <ul class="files">
+          <li>
+            <div class="file-title">Lecture 01 — Intro to C</div>
+            <div class="meta">PDF • 2.4 MB • 42 pages</div>
+          </li>
+          <li>
+            <div class="file-title">Arrays & Pointers</div>
+            <div class="meta">PDF • 3.1 MB • 58 pages</div>
+          </li>
+          <li>
+            <div class="file-title">Stacks & Queues</div>
+            <div class="meta">PDF • 1.7 MB • 33 pages</div>
+          </li>
+          <li>
+            <div class="file-title">Sorting Algorithms</div>
+            <div class="meta">PDF • 4.2 MB • 67 pages</div>
+          </li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- Viewer: PDF area -->
+    <section class="viewer">
+      <div class="viewer-toolbar">
+        <div class="toolbar-left">
+          <strong class="doc-title">Lecture 01 — Intro to C.pdf</strong>
+        </div>
+        <div class="toolbar-right">
+          <button class="btn">Prev</button>
+          <button class="btn">Next</button>
+          <button class="btn">Zoom −</button>
+          <button class="btn">Zoom +</button>
+        </div>
+      </div>
+
+      <!-- Placeholder iframe; later replace src with a PDF URL (e.g., Google Drive viewer or PDF.js) -->
+      <div class="pdf-frame">
+        <iframe
+          title="PDF Viewer"
+          src="about:blank"
+          sandbox=""
+          loading="lazy">
+        </iframe>
+        <div class="pdf-placeholder">
+          <div>
+            <div class="ph-title">PDF Viewer</div>
+            <p>Add your PDF URL or integrate PDF.js here.</p>
+            <p class="ph-note">This is a static placeholder (no JS yet).</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chat/Q&A panel -->
+    <aside class="chat">
+      <div class="chat-header">
+        <h3>Ask the Document</h3>
+      </div>
+      <div class="chat-body">
+        <div class="msg ai">
+          <div class="bubble">
+            Hi! Ask me about the current PDF. I’ll cite relevant pages.
+          </div>
+        </div>
+        <div class="msg user">
+          <div class="bubble">
+            What is a pointer in C?
+          </div>
+        </div>
+        <div class="msg ai">
+          <div class="bubble">
+            A pointer stores the memory address of a variable. <span class="cite">Ref: p. 12</span>
+          </div>
+        </div>
+      </div>
+      <form class="chat-input" action="#" method="get">
+        <input type="text" placeholder="Type your question…" aria-label="Ask about this PDF" />
+        <button class="btn primary" type="submit">Send</button>
+      </form>
+    </aside>
+  </main>
+
+  <footer class="app-footer">
+    <div>© 2025 StudyPDF • Demo UI</div>
+    <nav class="foot-links">
+      <a href="#">Privacy</a>
+      <a href="#">Terms</a>
+      <a href="#">Help</a>
+    </nav>
+  </footer>
+</body>
+</html>
