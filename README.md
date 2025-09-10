@@ -165,29 +165,14 @@ async function search(question, maxImgSize = 800, topK = 4) {
 - **Rate Limits** - Gemini API อาจมีข้อจำกัดการเรียกใช้
 - **Memory** - การโหลด embeddings ใช้ RAM ประมาณ 100-200MB
 
-## 🤝 การมีส่วนร่วม
-
-1. Fork repository นี้
-2. สร้าง feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. สร้าง Pull Request
-
 ## 📝 License
 
 โปรเจคนี้อยู่ภายใต้ MIT License - ดูรายละเอียดในไฟล์ [LICENSE](LICENSE)
 
 ## 👨‍💻 ผู้พัฒนา
 
-- **CEDT Final Project Team**
+- **hotaq (Chinnaphat Khuncharoen)**
 - **Repository**: https://github.com/Spidergy07/CEDT_FinalProject
-
-## 🙏 ขอบคุณ
-
-- **Cohere** - สำหรับ Embeddings API
-- **Google Gemini** - สำหรับ Vision AI API
-- **OpenAI** - สำหรับแนวคิด RAG system
-- **CEDT Program** - สำหรับ educational context
 
 ---
 
