@@ -1,0 +1,31 @@
+{
+  "name": "final",
+  "version": "1.0.0",
+  "description": "",
+  "main": "api.js",
+  "scripts": {
+    "start": "node api.js",
+    "dev": "node api.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Spidergy07/CEDT_FinalProject.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Spidergy07/CEDT_FinalProject/issues"
+  },
+  "homepage": "https://github.com/Spidergy07/CEDT_FinalProject#readme",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cohere-ai": "^7.18.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7"
+  }
+}
