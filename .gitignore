@@ -42,8 +42,7 @@ jspm_packages/
 # Yarn Integrity file
 .yarn-integrity
 
-# dotenv environment variables file
-.env
+
 
 # IDE files
 .vscode/
@@ -73,5 +72,4 @@ build/
 *.npy
 *.npz
 
-# PDF files (if they're large)
-*.pdf
+

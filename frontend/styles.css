@@ -13,6 +13,10 @@
     --radius: 12px;
     --radius-sm: 8px;
     --shadow: 0 6px 24px rgba(0,0,0,.28);
+    /* Layout sizing */
+    --sidebar-width: 280px;
+    --chat-width: 360px;
+    --resizer-width: 8px;
   }
   
   *{ box-sizing: border-box; }
@@ -28,7 +32,102 @@
   .visually-hidden{
     position:absolute; left:-9999px;
   }
-  .only-mobile{ display:none; }
+  .only-mobile{
+    display:none;
+  }
+
+  /* Ensure mobile buttons are always available at smaller screens */
+  @media (max-width: 1024px) {
+    /* Show overlay when any panel is open */
+    body.sidebar-open .overlay,
+    body.chat-open .overlay {
+      display: block;
+    }
+
+    /* JS-driven panel toggles */
+    body.sidebar-open .app-shell .sidebar {
+      transform: translateX(0) !important;
+      box-shadow: 4px 0 25px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    body.chat-open .app-shell .chat {
+      transform: translateX(0) !important;
+      box-shadow: -4px 0 25px rgba(0, 0, 0, 0.4) !important;
+    }
+    .only-mobile {
+      display: inline-flex !important;
+    }
+
+    /* Make mobile toggle buttons more visible for debugging */
+    .only-mobile.icon-btn {
+      background: rgba(91, 140, 255, 0.2) !important;
+      border-color: var(--accent) !important;
+      border-width: 2px !important;
+    }
+
+    .only-mobile.icon-btn:hover {
+      background: rgba(91, 140, 255, 0.3) !important;
+    }
+
+    /* Ensure sidebar and chat are positioned as overlays */
+    .sidebar {
+      position: fixed !important;
+      top: 64px !important;
+      left: 0 !important;
+      width: 280px !important;
+      height: calc(100vh - 64px) !important;
+      transform: translateX(-110%) !important;
+      z-index: 1000 !important;
+      background: var(--panel) !important;
+      border: 1px solid var(--line) !important;
+    }
+
+    .chat {
+      position: fixed !important;
+      top: 64px !important;
+      right: 0 !important;
+      width: 100% !important;
+      max-width: 400px !important;
+      height: calc(100vh - 64px) !important;
+      transform: translateX(110%) !important;
+      z-index: 1000 !important;
+      background: var(--panel) !important;
+      border: 1px solid var(--line) !important;
+    }
+
+    /* Toggle functionality */
+    #toggle-sidebar:checked ~ .app-shell .sidebar {
+      transform: translateX(0) !important;
+      box-shadow: 4px 0 25px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    #toggle-chat:checked ~ .app-shell .chat {
+      transform: translateX(0) !important;
+      box-shadow: -4px 0 25px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    /* Visual feedback when toggles are active */
+    #toggle-sidebar:checked ~ * label[for="toggle-sidebar"] {
+      background: var(--accent) !important;
+      color: white !important;
+    }
+
+    #toggle-chat:checked ~ * label[for="toggle-chat"] {
+      background: var(--accent) !important;
+      color: white !important;
+    }
+
+    /* Add backdrop when panels are open */
+    #toggle-sidebar:checked ~ .app-shell::before,
+    #toggle-chat:checked ~ .app-shell::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 40; /* below header (z:50) and panels (z:1000) */
+      pointer-events: none; /* do not block header icons */
+    }
+  }
   
   a{ color: inherit; text-decoration: none; }
   ul{ list-style: none; margin:0; padding:0; }
@@ -52,8 +151,24 @@
     position: sticky; top:0; z-index: 50;
     display:flex; align-items:center; justify-content: space-between;
     gap: 1rem; padding: .75rem 1rem;
-    background: rgba(10,13,20,.6); backdrop-filter: blur(8px);
+    background: rgba(10,13,20,.85); backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--line);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Global overlay for mobile panels */
+  .overlay {
+    display: none;
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 64px; /* keep header interactive */
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    z-index: 900;
   }
   .app-header .left, .app-header .right{
     display:flex; align-items:center; gap:.5rem;
@@ -66,24 +181,71 @@
     display:inline-flex; align-items:center; justify-content:center;
     width: 40px; height: 40px; border-radius: 10px;
     border:1px solid var(--line); background: #121623; cursor: pointer;
+    color: var(--text);
+    font-size: 16px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+  }
+
+  .icon-btn:hover {
+    background: #1a2030;
+    border-color: #2b3347;
+    transform: scale(1.05);
+  }
+
+  .icon-btn:active {
+    transform: scale(0.95);
   }
   .search{
     width:min(720px, 58vw);
+    transition: width 0.3s ease;
   }
   .search input{
     width:100%; border:1px solid var(--line); background: #0f1422;
     color:var(--text); padding:.6rem .8rem; border-radius: 999px;
     outline: none;
+    transition: all 0.2s ease;
+  }
+  .search input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(91, 140, 255, 0.2);
   }
   
   /* ========== App Shell ========== */
   .app-shell{
     display:grid;
-    grid-template-columns: 280px 1fr 360px;
+    grid-template-columns: var(--sidebar-width) var(--resizer-width) minmax(0,1fr) var(--resizer-width) var(--chat-width);
     gap: 1rem;
     padding: 1rem;
     max-width: 1400px; margin: 0 auto;
   }
+
+  /* Column resizers */
+  .resizer{
+    display: block;
+    width: var(--resizer-width);
+    cursor: col-resize;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    min-height: calc(100dvh - 160px);
+    align-self: stretch;
+    justify-self: stretch;
+    position: relative;
+    z-index: 5;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .resizer::after{
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 2px; height: 28px;
+    transform: translate(-50%, -50%);
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
+  }
+  .resizer:hover{ background: rgba(255,255,255,0.08); border-color: #2a3347; }
+  body.resizing{ user-select: none; cursor: col-resize; }
   
   /* Sidebar */
   .sidebar{
@@ -396,6 +558,8 @@
     overflow: hidden;
     background: #0e1220;
     touch-action: pan-x pan-y;
+    user-select: none;
+    -webkit-user-select: none;
   }
   
   .pdf-container {
@@ -415,6 +579,9 @@
     box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     border-radius: 8px;
     background: white;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
   }
   
   .pdf-placeholder{
@@ -1164,14 +1331,95 @@
     display:flex; flex-direction: column;
     min-height: calc(100dvh - 160px);
     overflow: hidden;
+    position: relative;
   }
   .chat-header{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding:.75rem .9rem; border-bottom:1px solid var(--line);
     background: var(--panel-2);
   }
+
+  .close-chat-btn {
+    display: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .close-chat-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
+  }
+
+  .close-chat-btn:active {
+    transform: scale(0.95);
+  }
   .chat-body{
     padding:.9rem; display:flex; flex-direction: column; gap:.6rem;
-    overflow:auto; flex:1;
+    overflow-y: auto; overflow-x: hidden; flex:1;
+    scroll-behavior: smooth;
+    max-height: calc(100vh - 200px);
+  }
+  
+  /* Custom scrollbar for chat */
+  .chat-body::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .chat-body::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+  }
+  
+  .chat-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+  }
+  
+  .chat-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  
+  /* Scroll to bottom button */
+  .scroll-to-bottom {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s ease;
+    z-index: 10;
+  }
+  
+  .scroll-to-bottom:hover {
+    background: var(--accent-2);
+    transform: scale(1.1);
+  }
+  
+  .scroll-to-bottom:active {
+    transform: scale(0.95);
   }
   .msg{ display:flex; }
   .msg.ai{ justify-content:flex-start; }
@@ -1189,20 +1437,29 @@
   .cite{ color: var(--accent-2); font-size:.85rem; padding-left:.35rem; }
   
   /* Loading state */
-  .loading {
-    opacity: 0.6;
-    pointer-events: none;
+  .loading { opacity: 0.8; }
+  .typing .bubble{
+    display: inline-flex; align-items: center; gap:.4rem;
   }
-  
-  .loading .bubble::after {
-    content: "...";
-    animation: dots 1.5s infinite;
+  .typing .bubble::after{
+    content: '';
+    display: inline-block;
+    width: 1.2em;
+    height: 1em;
+    background:
+      radial-gradient(currentColor 3px, transparent 4px) 0 50%,
+      radial-gradient(currentColor 3px, transparent 4px) 50% 50%,
+      radial-gradient(currentColor 3px, transparent 4px) 100% 50%;
+    background-size: 6px 6px;
+    background-repeat: no-repeat;
+    filter: opacity(.7);
+    animation: typingDots 1.2s infinite ease-in-out;
   }
-  
-  @keyframes dots {
-    0%, 20% { content: "."; }
-    40% { content: ".."; }
-    60%, 100% { content: "..."; }
+  @keyframes typingDots {
+    0% { background-position: 0 50%, 50% 50%, 100% 50%; filter: opacity(.2); }
+    33% { background-position: 0 35%, 50% 50%, 100% 50%; filter: opacity(.6); }
+    66% { background-position: 0 50%, 50% 35%, 100% 50%; filter: opacity(.9); }
+    100% { background-position: 0 50%, 50% 50%, 100% 35%; filter: opacity(.6); }
   }
   
   /* Message animations */
@@ -1256,13 +1513,43 @@
   
   /* iPad and Tablet */
   @media (max-width: 1024px) {
+    /* Use single-column layout while sidebar/chat become overlays */
     .app-shell {
-      grid-template-columns: 240px 1fr 280px;
+      grid-template-columns: 1fr;
       gap: 0.5rem;
     }
-    
+
     .close-sidebar-btn {
       display: flex !important;
+    }
+
+    /* Better tablet touch targets */
+    .year-header, .subject-item, .tree-item-content {
+      min-height: 48px;
+      padding: 0.8rem 0.9rem;
+    }
+
+    .btn, .icon-btn {
+      min-height: 42px;
+      min-width: 42px;
+    }
+
+    /* Tablet-optimized file tree */
+    .tree-name {
+      font-size: 0.95rem;
+    }
+
+    .tree-meta {
+      font-size: 0.85rem;
+    }
+
+    /* Better spacing for tablet */
+    .sidebar {
+      padding: 1rem;
+    }
+
+    .section + .section {
+      margin-top: 1.25rem;
     }
     
     .pdf-container {
@@ -1302,20 +1589,20 @@
   /* Medium Tablets */
   @media (max-width: 900px) {
     .app-shell {
-      grid-template-columns: 1fr;
+      grid-template-columns: 1fr !important;
       gap: 0.5rem;
     }
-    
+
     .sidebar {
-      position: fixed;
-      top: 64px;
-      left: 0;
-      width: 280px;
-      height: calc(100vh - 64px);
-      transform: translateX(-100%);
-      transition: transform 0.3s ease;
-      z-index: 100;
-      border-radius: 0;
+      position: fixed !important;
+      top: 64px !important;
+      left: 0 !important;
+      width: 280px !important;
+      height: calc(100vh - 64px) !important;
+      transform: translateX(-100%) !important;
+      transition: transform 0.3s ease !important;
+      z-index: 100 !important;
+      border-radius: 0 !important;
     }
     
     .sidebar.open {
@@ -1323,16 +1610,16 @@
     }
     
     .chat {
-      position: fixed;
-      top: 64px;
-      right: 0;
-      width: 100%;
-      max-width: 400px;
-      height: calc(100vh - 64px);
-      transform: translateX(100%);
-      transition: transform 0.3s ease;
-      z-index: 100;
-      border-radius: 0;
+      position: fixed !important;
+      top: 64px !important;
+      right: 0 !important;
+      width: 100% !important;
+      max-width: 400px !important;
+      height: calc(100vh - 64px) !important;
+      transform: translateX(100%) !important;
+      transition: transform 0.3s ease !important;
+      z-index: 100 !important;
+      border-radius: 0 !important;
     }
     
     .chat.open {
@@ -1348,12 +1635,47 @@
       min-width: 400px;
       bottom: 20px;
     }
+
+    /* Hide resizers on mobile/tablet overlay mode */
+    .resizer{ display: none !important; }
   }
   
+  /* Medium Tablets */
+  @media (max-width: 900px) {
+    .only-mobile {
+      display: inline-flex !important;
+    }
+  }
+
   /* Mobile and Small Tablets */
   @media (max-width: 860px) {
-    .only-mobile { display: inline-flex; }
-    .search { width: 44vw; }
+    .only-mobile {
+      display: inline-flex !important;
+    }
+
+    .app-header {
+      padding: .5rem .75rem;
+      gap: 0.5rem;
+    }
+
+    .app-header .center {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .search {
+      width: 100%;
+      max-width: 280px;
+    }
+
+    .search input {
+      padding: .5rem .65rem;
+      font-size: 14px;
+    }
+
+    .brand {
+      font-size: 1rem;
+    }
     
     .app-shell {
       grid-template-columns: 1fr;
@@ -1366,21 +1688,38 @@
     
     /* PDF Viewer Mobile Optimizations */
     .pdf-container {
-      padding: 10px;
+      padding: 8px;
     }
-    
+
+    .pdf-frame {
+      min-height: 60vh;
+    }
+
+    #pdf-canvas {
+      border-radius: 4px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+    }
+
     .nav-btn {
-      width: 40px;
-      height: 40px;
+      width: 42px;
+      height: 42px;
       font-size: 18px;
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
     }
-    
+
     .pdf-nav-left {
-      left: 10px;
+      left: 8px;
     }
-    
+
     .pdf-nav-right {
-      right: 10px;
+      right: 8px;
+    }
+
+    /* Mobile PDF touch gestures */
+    .pdf-container {
+      touch-action: pan-x pan-y pinch-zoom;
+      -webkit-overflow-scrolling: touch;
     }
     
     .pdf-controls-overlay {
@@ -1410,64 +1749,134 @@
     
     /* Sidebar toggle */
     .sidebar {
-      position: fixed;
-      top: 64px;
-      left: 0;
-      width: 85%;
-      max-width: 320px;
-      height: calc(100vh - 64px);
-      transform: translateX(-100%);
-      transition: transform 0.3s ease;
-      z-index: 100;
-      border-radius: 0;
+      position: fixed !important;
+      top: 64px !important;
+      left: 0 !important;
+      width: 85% !important;
+      max-width: 320px !important;
+      height: calc(100vh - 64px) !important;
+      transform: translateX(-110%) !important;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      z-index: 1000 !important;
+      border-radius: 0 !important;
+      box-shadow: 2px 0 20px rgba(0, 0, 0, 0.3) !important;
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch !important;
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .sidebar::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+    }
+
+    .sidebar-header {
+      position: sticky;
+      top: 0;
+      background: var(--panel);
+      z-index: 10;
+      border-bottom: 1px solid var(--line);
     }
     
     #toggle-sidebar:checked ~ .app-shell .sidebar {
-      transform: translateX(0);
+      transform: translateX(0) !important;
+      box-shadow: 4px 0 25px rgba(0, 0, 0, 0.4);
     }
-    
+
     /* Dim background when sidebar open */
     #toggle-sidebar:checked ~ .app-shell::before {
       content: "";
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 99;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 40; /* below header (z:50) and panels (z:1000) */
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
     }
   
     /* Chat toggle */
     .chat {
-      position: fixed;
-      top: 64px;
-      right: 0;
-      width: 100%;
-      max-width: 400px;
-      height: calc(100vh - 64px);
-      transform: translateX(100%);
-      transition: transform 0.3s ease;
-      z-index: 100;
-      border-radius: 0;
+      position: fixed !important;
+      top: 64px !important;
+      right: 0 !important;
+      width: 100% !important;
+      max-width: 400px !important;
+      height: calc(100vh - 64px) !important;
+      transform: translateX(110%) !important;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      z-index: 1000 !important;
+      border-radius: 0 !important;
+      box-shadow: -2px 0 20px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    .chat .chat-body {
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+    }
+
+    .chat-input {
+      position: sticky;
+      bottom: 0;
+      background: #0f1422;
+      border-top: 1px solid var(--line);
+      padding: 0.8rem;
+      gap: 0.6rem;
+    }
+
+    .chat-input input {
+      touch-action: manipulation;
+      padding: 0.75rem 1rem;
+      font-size: 16px; /* Prevent zoom on iOS */
+      border-radius: 20px;
+    }
+
+    .chat-input .btn.primary {
+      min-width: 60px;
+      border-radius: 20px;
     }
     
     #toggle-chat:checked ~ .app-shell .chat {
-      transform: translateX(0);
+      transform: translateX(0) !important;
+      box-shadow: -4px 0 25px rgba(0, 0, 0, 0.4);
     }
-    
+
     #toggle-chat:checked ~ .app-shell::before {
       content: "";
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 99;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 40; /* below header (z:50) and panels (z:1000) */
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+    }
+
+    /* Chat message improvements */
+    .msg {
+      margin-bottom: 0.75rem;
+    }
+
+    .bubble {
+      max-width: 85%;
+      line-height: 1.5;
+      word-wrap: break-word;
     }
     
     /* Writing tools mobile optimization */
     .writing-tools {
       min-width: 320px;
+      max-width: 95vw;
       bottom: 15px;
       left: 50%;
       transform: translateX(-50%);
       padding: 12px;
+      border-radius: 12px;
+    }
+
+    .writing-tools-overlay {
+      padding: 0 10px;
     }
     
     .tool-group {
@@ -1504,14 +1913,128 @@
   
   /* Very Small Screens */
   @media (max-width: 480px) {
+    .app-header {
+      padding: .4rem .5rem;
+    }
+
+    .app-header .center {
+      display: none;
+    }
+
+    .brand {
+      font-size: 0.95rem;
+    }
+
+    .icon-btn {
+      width: 42px;
+      height: 42px;
+      font-size: 18px;
+      border-width: 2px;
+      background: rgba(18, 22, 35, 0.95);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .icon-btn:hover {
+      background: rgba(26, 32, 48, 0.95);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Make sure mobile toggle buttons are always visible */
+    .only-mobile.icon-btn {
+      display: inline-flex !important;
+      z-index: 1000;
+    }
+
+    /* Highlight the toggle buttons on mobile */
+    label.icon-btn {
+      position: relative;
+    }
+
+    label.icon-btn::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      right: -2px;
+      bottom: -2px;
+      border: 2px solid transparent;
+      border-radius: 12px;
+      transition: border-color 0.2s ease;
+    }
+
+    /* Show border when sidebar/chat is open */
+    #toggle-sidebar:checked ~ * label[for="toggle-sidebar"] {
+      background: var(--accent) !important;
+      color: white !important;
+    }
+
+    #toggle-chat:checked ~ * label[for="toggle-chat"] {
+      background: var(--accent) !important;
+      color: white !important;
+    }
+
+    #toggle-sidebar:checked ~ * label[for="toggle-sidebar"]::after {
+      border-color: var(--accent);
+    }
+
+    #toggle-chat:checked ~ * label[for="toggle-chat"]::after {
+      border-color: var(--accent);
+    }
+
+    .btn {
+      padding: .45rem .7rem;
+      font-size: 0.9rem;
+      min-height: 38px;
+      touch-action: manipulation;
+    }
+
+    /* Mobile-specific improvements */
+    .app-footer {
+      padding: 0.75rem 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    .foot-links {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .foot-links a {
+      margin-left: 0;
+      padding: 0.25rem;
+      min-height: 32px;
+      display: flex;
+      align-items: center;
+    }
+
+    /* Better mobile form interactions */
+    input, select, textarea {
+      font-size: 16px; /* Prevent zoom on iOS */
+    }
+
+    button:active {
+      transform: scale(0.95);
+      transition: transform 0.1s ease;
+    }
     .pdf-container {
       padding: 5px;
     }
-    
+
     .nav-btn {
-      width: 35px;
-      height: 35px;
+      width: 38px;
+      height: 38px;
       font-size: 16px;
+    }
+
+    /* Very small screen PDF optimizations */
+    .pdf-frame {
+      min-height: 65vh;
+    }
+
+    .pdf-frame::after {
+      font-size: 9px;
+      padding: 3px 10px;
     }
     
     .pdf-nav-left {
@@ -1524,37 +2047,90 @@
     
     .pdf-controls {
       padding: 4px 8px;
-      gap: 4px;
+      gap: 3px;
+      border-radius: 20px;
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
     }
-    
+
     .control-btn {
-      width: 28px;
-      height: 28px;
-      font-size: 10px;
+      width: 32px;
+      height: 32px;
+      font-size: 11px;
+      min-width: 32px;
+      min-height: 32px;
     }
-    
+
     .zoom-level, .page-info {
+      font-size: 11px;
+      min-width: 40px;
+      padding: 4px 8px;
+    }
+
+    /* Mobile PDF gesture hints */
+    .pdf-frame::after {
+      content: "Swipe left/right to navigate • Pinch to zoom";
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 12px;
       font-size: 10px;
-      min-width: 35px;
-      padding: 3px 6px;
+      opacity: 0;
+      animation: fadeInOut 4s ease-in-out 1s;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    @keyframes fadeInOut {
+      0%, 100% { opacity: 0; }
+      20%, 80% { opacity: 0.8; }
     }
     
     /* Zoom window mobile optimization */
     .zoom-window-container {
       width: 98%;
-      height: 90%;
+      height: 92%;
       max-height: none;
+      border-radius: 12px;
     }
-    
+
     .zoom-window-main {
       flex-direction: column;
     }
-    
+
     .writing-area {
       width: 100%;
-      height: 200px;
+      min-height: 180px;
+      height: 40%;
       border-left: none;
       border-top: 1px solid #e0e0e0;
+    }
+
+    .pdf-preview-area {
+      min-height: 60%;
+    }
+
+    /* Mobile zoom window header */
+    .zoom-window-header {
+      padding: 12px 16px;
+    }
+
+    .zoom-window-header h4 {
+      font-size: 16px;
+    }
+
+    .zoom-window-btn {
+      width: 32px;
+      height: 32px;
+    }
+
+    .zoom-level-indicator {
+      padding: 3px 10px;
+      font-size: 11px;
     }
     
     .writing-tools {
@@ -1601,11 +2177,27 @@
     .pdf-container {
       padding: 20px;
     }
-    
+
     .nav-btn {
       width: 50px;
       height: 50px;
       font-size: 22px;
+    }
+
+    /* Optimize sidebar for landscape iPad */
+    .app-shell {
+      grid-template-columns: 260px 1fr 300px;
+      gap: 0.75rem;
+    }
+
+    /* Better use of horizontal space */
+    .sidebar {
+      max-height: calc(100vh - 120px);
+      overflow-y: auto;
+    }
+
+    .chat {
+      max-height: calc(100vh - 120px);
     }
   }
   
@@ -1615,10 +2207,40 @@
       grid-template-columns: 1fr;
       gap: 0.5rem;
     }
-    
+
+    .sidebar {
+      position: fixed;
+      top: 64px;
+      left: 0;
+      width: 320px;
+      height: calc(100vh - 64px);
+      transform: translateX(-100%);
+      transition: transform 0.3s ease;
+      z-index: 100;
+      border-radius: 0;
+    }
+
     .chat {
-      grid-column: 1 / -1;
-      min-height: 40vh;
+      position: fixed;
+      top: 64px;
+      right: 0;
+      width: 350px;
+      height: calc(100vh - 64px);
+      transform: translateX(100%);
+      transition: transform 0.3s ease;
+      z-index: 100;
+      border-radius: 0;
+      min-height: auto;
+    }
+
+    /* Improved iPad portrait PDF viewing */
+    .viewer {
+      width: 100%;
+      min-height: calc(100vh - 120px);
+    }
+
+    .pdf-container {
+      padding: 15px;
     }
   }
 
@@ -1629,9 +2251,27 @@
       min-height: 44px;
       min-width: 44px;
     }
-    
+
     .year-header, .subject-item, .tree-item-content {
       min-height: 44px;
+      padding: 0.75rem 0.8rem;
+    }
+
+    /* Improve touch feedback */
+    .year-header:active,
+    .subject-item:active,
+    .tree-item-content:active {
+      transform: scale(0.95);
+      transition: transform 0.1s ease;
+    }
+
+    /* Better touch spacing */
+    .subjects-list {
+      margin-top: 0.5rem;
+    }
+
+    .tree-item {
+      margin-bottom: 0.35rem;
     }
     
     .resize-handle {
@@ -1662,6 +2302,29 @@
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
+
+    /* High DPI PDF rendering */
+    #pdf-canvas {
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: optimize-contrast;
+      image-rendering: crisp-edges;
+    }
+
+    /* Better icon rendering on retina displays */
+    .icon-btn,
+    .year-icon,
+    .subject-icon,
+    .tree-icon {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Enhance shadows and borders for retina */
+    .sidebar,
+    .chat,
+    .viewer {
+      border-width: 0.5px;
+    }
   }
 
   /* Landscape Mobile Optimizations */
@@ -1669,25 +2332,279 @@
     .app-shell {
       grid-template-columns: 1fr;
     }
-    
+
     .sidebar {
-      width: 60%;
-      max-width: 300px;
+      width: 55%;
+      max-width: 280px;
     }
-    
+
     .chat {
       width: 100%;
-      max-width: 350px;
+      max-width: 320px;
     }
-    
+
     .writing-tools {
-      bottom: 10px;
-      min-width: 300px;
+      bottom: 8px;
+      min-width: 280px;
     }
-    
+
     .zoom-window-container {
-      height: 95%;
+      height: 96%;
+      width: 99%;
+    }
+
+    /* Optimize PDF for landscape */
+    .pdf-frame {
+      min-height: 70vh;
+    }
+
+    .pdf-container {
+      padding: 6px;
+    }
+
+    .nav-btn {
+      width: 36px;
+      height: 36px;
+    }
+
+    .pdf-controls {
+      bottom: 8px;
+    }
+
+    .control-btn {
+      width: 28px;
+      height: 28px;
+      font-size: 10px;
+    }
+
+    /* Improved landscape sidebar */
+    .sidebar {
+      box-shadow: 2px 0 15px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Better landscape chat */
+    .chat {
+      box-shadow: -2px 0 15px rgba(0, 0, 0, 0.25);
+    }
+
+    .chat-body {
+      padding: 0.6rem;
+    }
+
+    .bubble {
+      max-width: 90%;
+      padding: 0.5rem 0.6rem;
     }
   }
-  
-  
+
+  /* Additional Mobile Enhancements */
+  @media (max-width: 860px) {
+    /* Improve mobile scrolling performance */
+    .sidebar,
+    .chat-body,
+    .pdf-container {
+      -webkit-overflow-scrolling: touch;
+      overflow-scrolling: touch;
+    }
+
+    /* Mobile pull-to-refresh prevention */
+    body {
+      overscroll-behavior-y: contain;
+    }
+
+    /* Better mobile tap targets */
+    .tree-item-content,
+    .year-header,
+    .subject-item {
+      position: relative;
+    }
+
+    .tree-item-content::before,
+    .year-header::before,
+    .subject-item::before {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      right: -2px;
+      bottom: -2px;
+    }
+
+    /* Mobile keyboard adjustments */
+    .chat-input {
+      padding-bottom: max(0.8rem, env(safe-area-inset-bottom));
+    }
+
+    /* iOS Safari specific fixes */
+    @supports (-webkit-touch-callout: none) {
+      .app-shell {
+        min-height: -webkit-fill-available;
+      }
+
+      .sidebar,
+      .chat {
+        height: calc(100vh - 64px - env(safe-area-inset-bottom));
+      }
+    }
+  }
+
+  /* Reduce motion for accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar,
+    .chat,
+    .year-toggle,
+    .tree-toggle {
+      transition: none !important;
+    }
+
+    .msg {
+      animation: none !important;
+    }
+
+    .pdf-frame::after {
+      animation: none !important;
+    }
+
+    .loading-spinner {
+      animation: none !important;
+    }
+  }
+
+  /* Performance Optimizations */
+  .pdf-frame,
+  .sidebar,
+  .chat {
+    will-change: transform;
+  }
+
+  .pdf-canvas,
+  .writing-canvas {
+    will-change: transform;
+  }
+
+  /* Container queries support for future-proofing */
+  @supports (container-type: inline-size) {
+    .app-shell {
+      container-type: inline-size;
+    }
+
+    @container (max-width: 860px) {
+      .search {
+        width: 100%;
+      }
+    }
+  }
+
+  /* Print media styles */
+  @media print {
+    .app-header,
+    .sidebar,
+    .chat,
+    .pdf-controls-overlay,
+    .pdf-nav-overlay,
+    .writing-tools-overlay {
+      display: none !important;
+    }
+
+    .viewer {
+      width: 100% !important;
+      height: auto !important;
+      box-shadow: none !important;
+      border: none !important;
+    }
+
+    .pdf-frame {
+      height: auto !important;
+      min-height: auto !important;
+    }
+
+    #pdf-canvas {
+      max-width: 100% !important;
+      height: auto !important;
+      box-shadow: none !important;
+    }
+  }
+
+  /* Dark mode support */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d12;
+      --panel: #121620;
+      --panel-2: #0f1320;
+      --text: #e7ecf3;
+      --muted: #9aa6bf;
+      --line: #1f2533;
+    }
+
+    /* Ensure PDF canvas maintains white background in dark mode */
+    #pdf-canvas {
+      background: white !important;
+    }
+
+    .zoom-window-container,
+    .writing-area {
+      background: white !important;
+      color: black !important;
+    }
+  }
+
+  /* Prefers contrast adjustments */
+  @media (prefers-contrast: high) {
+    :root {
+      --line: #3a4556;
+      --muted: #8090a0;
+    }
+
+    .btn {
+      border-width: 2px;
+    }
+
+    .sidebar,
+    .chat,
+    .viewer {
+      border-width: 2px;
+    }
+  }
+
+  /* Force-open rules placed at end for cascade priority */
+  @media (max-width: 1024px) {
+    body.sidebar-open .overlay,
+    body.chat-open .overlay {
+      display: block !important;
+    }
+
+    body.sidebar-open .app-shell .sidebar {
+      transform: translateX(0) !important;
+      box-shadow: 4px 0 25px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    body.chat-open .app-shell .chat {
+      transform: translateX(0) !important;
+      box-shadow: -4px 0 25px rgba(0, 0, 0, 0.4) !important;
+    }
+  }
+
+  /* Desktop/laptop collapsible panels */
+  @media (min-width: 1025px) {
+    body.sidebar-hidden .sidebar { display: none !important; }
+    body.chat-hidden .chat { display: none !important; }
+
+    /* Hide left only: 3 columns (viewer, resizer, chat) */
+    body.sidebar-hidden:not(.chat-hidden) .app-shell {
+      grid-template-columns: minmax(0,1fr) var(--resizer-width) var(--chat-width);
+    }
+
+    /* Hide right only: 3 columns (sidebar, resizer, viewer) */
+    body.chat-hidden:not(.sidebar-hidden) .app-shell {
+      grid-template-columns: var(--sidebar-width) var(--resizer-width) minmax(0,1fr);
+    }
+
+    /* Hide both: 1 column (viewer only) */
+    body.sidebar-hidden.chat-hidden .app-shell {
+      grid-template-columns: minmax(0,1fr);
+    }
+
+    /* Also hide the corresponding resizers when a panel is hidden */
+    body.sidebar-hidden .resizer-left { display:none !important; }
+    body.chat-hidden .resizer-right { display:none !important; }
+  }

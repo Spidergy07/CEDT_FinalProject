@@ -4,17 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>PDF Study Platform — RAG-ready</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20250915-1" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
-  <!-- Mobile toggles (pure CSS hamburger) -->
-  <input type="checkbox" id="toggle-sidebar" class="visually-hidden" />
-  <input type="checkbox" id="toggle-chat" class="visually-hidden" />
+  <!-- JS-driven toggles (replaces checkbox hack) -->
+  <div class="overlay" id="overlay" aria-hidden="true"></div>
 
   <header class="app-header">
     <div class="left">
-      <label for="toggle-sidebar" class="icon-btn only-mobile" aria-label="Toggle sidebar">☰</label>
+      <button id="open-sidebar" class="icon-btn" type="button" aria-label="Toggle sidebar">☰</button>
       <a class="brand" href="#">Study<span>PDF</span></a>
     </div>
     <div class="center">
@@ -24,7 +23,7 @@
     </div>
     <div class="right">
       <button class="btn ghost">Login</button>
-      <label for="toggle-chat" class="icon-btn only-mobile" aria-label="Toggle chat">💬</label>
+      <button id="open-chat" class="icon-btn" type="button" aria-label="Toggle chat">💬</button>
     </div>
   </header>
 
@@ -97,6 +96,8 @@
         </ul>
       </div>
     </aside>
+    <!-- Resizer between Sidebar and Viewer -->
+    <div class="resizer resizer-left" id="resizer-left" role="separator" aria-label="Resize sidebar" aria-orientation="vertical"></div>
 
     <!-- Viewer: PDF area -->
     <section class="viewer">
@@ -336,13 +337,20 @@
       </div>
     </section>
 
+    <!-- Resizer between Viewer and Chat -->
+    <div class="resizer resizer-right" id="resizer-right" role="separator" aria-label="Resize chat" aria-orientation="vertical"></div>
+
     <!-- Chat/Q&A panel -->
     <aside class="chat">
       <div class="chat-header">
         <h3>ถาม TA Tohtoh</h3>
+        <button class="close-chat-btn only-mobile" id="close-chat-btn" title="Close Chat">✕</button>
       </div>
       <div class="chat-body">
         <!-- Messages will be dynamically added here -->
+        <button class="scroll-to-bottom" id="scroll-to-bottom" title="Scroll to bottom">
+          ↓
+        </button>
       </div>
       <form class="chat-input" action="#" method="get">
         <input type="text" placeholder="ถามคำถามเกี่ยวกับเอกสารการเรียน..." aria-label="Ask about this PDF" />
@@ -413,6 +421,13 @@
         this.shapeStartPoint = null;
         this.layers = [];
         this.currentLayer = 0;
+
+        // Panel resize state
+        this.isResizingPanels = false;
+        this.activeResizer = null; // 'left' | 'right' | null
+        this.resizeStartX = 0;
+        this.startSidebarWidth = 280;
+        this.startChatWidth = 360;
         
         this.init();
       }
@@ -420,6 +435,8 @@
       init() {
         this.setupEventListeners();
         this.loadInitialState();
+        // Ensure overlay aligns with header height on load
+        this.updateOverlayTop();
       }
 
       setupEventListeners() {
@@ -432,6 +449,50 @@
 
         // Handle responsive behavior
         this.setupResponsiveHandlers();
+        // Desktop panel resizers
+        this.setupResizablePanels();
+
+        // Mobile panel toggles (hamburger/chat)
+        const openSidebarBtn = document.getElementById('open-sidebar');
+        if (openSidebarBtn) {
+          openSidebarBtn.addEventListener('click', () => {
+            if (window.innerWidth <= 1024) {
+              if (document.body.classList.contains('sidebar-open')) {
+                this.closeSidebar();
+              } else {
+                this.openSidebar();
+              }
+            } else {
+              document.body.classList.toggle('sidebar-hidden');
+              this.adjustViewerAfterLayoutChange();
+            }
+          });
+        }
+
+        const openChatBtn = document.getElementById('open-chat');
+        if (openChatBtn) {
+          openChatBtn.addEventListener('click', () => {
+            if (window.innerWidth <= 1024) {
+              if (document.body.classList.contains('chat-open')) {
+                this.closeChat();
+              } else {
+                this.openChat();
+              }
+            } else {
+              document.body.classList.toggle('chat-hidden');
+              this.adjustViewerAfterLayoutChange();
+            }
+          });
+        }
+
+        // Backdrop overlay
+        const overlay = document.getElementById('overlay');
+        if (overlay) {
+          overlay.addEventListener('click', () => {
+            this.closeSidebar();
+            this.closeChat();
+          });
+        }
 
         // Chat form submission
         const chatForm = document.querySelector('.chat-input');
@@ -439,6 +500,22 @@
           chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleChatSubmit();
+          });
+        }
+
+        // Chat scroll functionality
+        const chatBody = document.querySelector('.chat-body');
+        const scrollToBottomBtn = document.querySelector('.scroll-to-bottom');
+        
+        if (chatBody && scrollToBottomBtn) {
+          // Monitor scroll position
+          chatBody.addEventListener('scroll', () => {
+            this.checkScrollPosition();
+          });
+          
+          // Scroll to bottom button click
+          scrollToBottomBtn.addEventListener('click', () => {
+            this.scrollToBottom();
           });
         }
 
@@ -535,6 +612,24 @@
             this.closeSidebar();
           });
         }
+
+        // Close chat button (mobile)
+        const closeChatBtn = document.getElementById('close-chat-btn');
+        if (closeChatBtn) {
+          closeChatBtn.addEventListener('click', () => {
+            this.closeChat();
+          });
+        }
+
+        // Tap chat header to close on mobile/tablet
+        const chatHeader = document.querySelector('.chat-header');
+        if (chatHeader) {
+          chatHeader.addEventListener('click', () => {
+            if (window.innerWidth <= 1024 && document.body.classList.contains('chat-open')) {
+              this.closeChat();
+            }
+          });
+        }
       }
 
       loadInitialState() {
@@ -554,6 +649,7 @@
 
         // Show loading state
         this.setLoading(true);
+        this.showTypingIndicator();
 
         try {
           // Call the search-and-answer API
@@ -575,6 +671,7 @@
           const data = await response.json();
           
           // Display the answer
+          this.hideTypingIndicator();
           this.addMessage('ai', data.answer.answer);
           
           // Update chat history
@@ -586,6 +683,7 @@
 
         } catch (error) {
           console.error('Error calling API:', error);
+          this.hideTypingIndicator();
           this.addMessage('ai', 'ขออภัย เกิดข้อผิดพลาดในการประมวลผลคำถาม กรุณาลองใหม่อีกครั้ง');
         } finally {
           this.setLoading(false);
@@ -607,6 +705,29 @@
         input.value = '';
       }
 
+      // Typing indicator (animated)
+      showTypingIndicator() {
+        // Avoid duplicates
+        if (this.typingEl) return;
+        const chatBody = document.querySelector('.chat-body');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'msg ai loading typing';
+        const bubbleDiv = document.createElement('div');
+        bubbleDiv.className = 'bubble';
+        bubbleDiv.textContent = 'TA Tohtoh กำลังพิมพ์';
+        messageDiv.appendChild(bubbleDiv);
+        chatBody.appendChild(messageDiv);
+        this.scrollToBottom();
+        this.typingEl = messageDiv;
+      }
+
+      hideTypingIndicator() {
+        if (this.typingEl && this.typingEl.parentNode) {
+          this.typingEl.parentNode.removeChild(this.typingEl);
+        }
+        this.typingEl = null;
+      }
+
       addMessage(sender, content) {
         const chatBody = document.querySelector('.chat-body');
         const messageDiv = document.createElement('div');
@@ -619,8 +740,31 @@
         messageDiv.appendChild(bubbleDiv);
         chatBody.appendChild(messageDiv);
         
-        // Scroll to bottom
-        chatBody.scrollTop = chatBody.scrollHeight;
+        // Smooth scroll to bottom
+        this.scrollToBottom();
+      }
+
+      scrollToBottom() {
+        const chatBody = document.querySelector('.chat-body');
+        chatBody.scrollTo({
+          top: chatBody.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+
+      checkScrollPosition() {
+        const chatBody = document.querySelector('.chat-body');
+        const scrollBtn = document.querySelector('.scroll-to-bottom');
+        
+        if (!scrollBtn) return;
+        
+        const isNearBottom = chatBody.scrollTop + chatBody.clientHeight >= chatBody.scrollHeight - 50;
+        
+        if (isNearBottom) {
+          scrollBtn.style.display = 'none';
+        } else {
+          scrollBtn.style.display = 'flex';
+        }
       }
 
       setLoading(loading) {
@@ -857,6 +1001,11 @@
         // Add active class to selected file
         fileItem.classList.add('active');
         
+        // On mobile/tablet, close the sidebar to give viewer full width
+        if (window.innerWidth <= 1024) {
+          this.closeSidebar();
+        }
+
         // Update document title
         const docTitle = document.querySelector('.doc-title');
         if (docTitle) {
@@ -1179,11 +1328,24 @@
         }
       }
 
+      openSidebar() {
+        document.body.classList.add('sidebar-open');
+        document.body.classList.remove('chat-open');
+        this.updateOverlayTop();
+      }
+
       closeSidebar() {
-        const sidebarToggle = document.getElementById('toggle-sidebar');
-        if (sidebarToggle) {
-          sidebarToggle.checked = false;
-        }
+        document.body.classList.remove('sidebar-open');
+      }
+
+      openChat() {
+        document.body.classList.add('chat-open');
+        document.body.classList.remove('sidebar-open');
+        this.updateOverlayTop();
+      }
+
+      closeChat() {
+        document.body.classList.remove('chat-open');
       }
 
       formatFileSize(bytes) {
@@ -1207,6 +1369,8 @@
         // Handle window resize
         window.addEventListener('resize', () => {
           this.handleResize();
+          this.updateOverlayTop();
+          this.updateResizerAvailability();
         });
 
         // Handle orientation change
@@ -1227,6 +1391,8 @@
             this.handleEscapeKey();
           }
         });
+
+        // Panel conflict management handled by openSidebar/openChat
       }
 
       handleResize() {
@@ -1244,6 +1410,14 @@
         if (width < 480) {
           this.closeOverlaysOnSmallScreen();
         }
+
+        // When returning to desktop, ensure panels are reset
+        if (width > 1024) {
+          document.body.classList.remove('sidebar-open');
+          document.body.classList.remove('chat-open');
+        }
+        // Ensure resizers enabled/disabled appropriately
+        this.updateResizerAvailability();
       }
 
       updateWritingToolsPosition() {
@@ -1290,42 +1464,170 @@
         }
       }
 
+      adjustViewerAfterLayoutChange() {
+        // Refit PDF to new available width on desktop panel toggles
+        try {
+          if (this.pdfDoc) {
+            this.fitToWidth();
+          }
+        } catch (e) {
+          console.warn('adjustViewerAfterLayoutChange failed:', e);
+        }
+        // Sync resizers when layout toggles
+        this.updateResizerAvailability();
+      }
+
+      updateOverlayTop() {
+        const overlay = document.getElementById('overlay');
+        const header = document.querySelector('.app-header');
+        if (overlay && header) {
+          overlay.style.top = `${header.offsetHeight}px`;
+        }
+      }
+
+      // =====================
+      // Resizable Panels (Desktop)
+      // =====================
+      setupResizablePanels() {
+        // Initialize CSS variables from localStorage if available
+        const root = document.documentElement;
+        const savedSidebar = localStorage.getItem('sidebarWidth');
+        const savedChat = localStorage.getItem('chatWidth');
+        if (savedSidebar) root.style.setProperty('--sidebar-width', `${parseInt(savedSidebar, 10)}px`);
+        if (savedChat) root.style.setProperty('--chat-width', `${parseInt(savedChat, 10)}px`);
+
+        // Cache starting values
+        const computed = getComputedStyle(root);
+        this.startSidebarWidth = parseInt(computed.getPropertyValue('--sidebar-width')) || 280;
+        this.startChatWidth = parseInt(computed.getPropertyValue('--chat-width')) || 360;
+
+        const left = document.getElementById('resizer-left');
+        const right = document.getElementById('resizer-right');
+        this.leftResizer = left;
+        this.rightResizer = right;
+
+        if (left) {
+          left.addEventListener('mousedown', (e) => this.beginPanelResize(e, 'left'));
+          left.addEventListener('touchstart', (e) => this.beginPanelResize(e, 'left'), { passive: true });
+        }
+        if (right) {
+          right.addEventListener('mousedown', (e) => this.beginPanelResize(e, 'right'));
+          right.addEventListener('touchstart', (e) => this.beginPanelResize(e, 'right'), { passive: true });
+        }
+
+        // Global listeners
+        document.addEventListener('mousemove', (e) => this.handlePanelResize(e));
+        document.addEventListener('mouseup', () => this.endPanelResize());
+        document.addEventListener('touchmove', (e) => this.handlePanelResize(e), { passive: false });
+        document.addEventListener('touchend', () => this.endPanelResize());
+
+        this.updateResizerAvailability();
+      }
+
+      updateResizerAvailability() {
+        const desktop = window.innerWidth > 1024;
+        const left = this.leftResizer;
+        const right = this.rightResizer;
+
+        if (!left || !right) return;
+
+        if (!desktop) {
+          left.style.display = 'none';
+          right.style.display = 'none';
+          this.isResizingPanels = false;
+          this.activeResizer = null;
+          return;
+        }
+
+        // Hide resizer next to any hidden panel
+        const sidebarHidden = document.body.classList.contains('sidebar-hidden');
+        const chatHidden = document.body.classList.contains('chat-hidden');
+
+        left.style.display = sidebarHidden ? 'none' : 'block';
+        right.style.display = chatHidden ? 'none' : 'block';
+      }
+
+      beginPanelResize(e, which) {
+        if (window.innerWidth <= 1024) return; // desktop only
+        this.isResizingPanels = true;
+        this.activeResizer = which; // 'left' or 'right'
+        this.resizeStartX = (e.touches ? e.touches[0].clientX : e.clientX);
+
+        // Snapshot starting widths
+        const root = document.documentElement;
+        const computed = getComputedStyle(root);
+        this.startSidebarWidth = parseInt(computed.getPropertyValue('--sidebar-width')) || 280;
+        this.startChatWidth = parseInt(computed.getPropertyValue('--chat-width')) || 360;
+
+        // Prevent text selection during drag
+        document.body.classList.add('resizing');
+        e.preventDefault?.();
+      }
+
+      handlePanelResize(e) {
+        if (!this.isResizingPanels || !this.activeResizer) return;
+        const x = (e.touches ? e.touches[0].clientX : e.clientX);
+        const deltaX = x - this.resizeStartX;
+
+        const root = document.documentElement;
+        const minSidebar = 180; // px
+        const maxSidebar = 600;
+        const minChat = 240;
+        const maxChat = 600;
+
+        if (this.activeResizer === 'left') {
+          let newWidth = this.startSidebarWidth + deltaX;
+          newWidth = Math.max(minSidebar, Math.min(maxSidebar, newWidth));
+          root.style.setProperty('--sidebar-width', `${Math.round(newWidth)}px`);
+        } else if (this.activeResizer === 'right') {
+          // Move left increases chat width (delta negative); adjust accordingly
+          let newWidth = this.startChatWidth - deltaX;
+          newWidth = Math.max(minChat, Math.min(maxChat, newWidth));
+          root.style.setProperty('--chat-width', `${Math.round(newWidth)}px`);
+        }
+
+        // Rerender canvas sizing-sensitive elements
+        this.adjustViewerAfterLayoutChange();
+        e.preventDefault?.();
+      }
+
+      endPanelResize() {
+        if (!this.isResizingPanels) return;
+        this.isResizingPanels = false;
+        document.body.classList.remove('resizing');
+        // Persist widths
+        const root = document.documentElement;
+        const computed = getComputedStyle(root);
+        const sidebar = parseInt(computed.getPropertyValue('--sidebar-width')) || 280;
+        const chat = parseInt(computed.getPropertyValue('--chat-width')) || 360;
+        localStorage.setItem('sidebarWidth', String(sidebar));
+        localStorage.setItem('chatWidth', String(chat));
+        this.activeResizer = null;
+      }
+
       closeOverlaysOnSmallScreen() {
         const width = window.innerWidth;
         
         if (width < 480) {
-          // Close chat if open
-          const chatToggle = document.getElementById('toggle-chat');
-          if (chatToggle && chatToggle.checked) {
-            chatToggle.checked = false;
-          }
-          
-          // Close sidebar if open
-          const sidebarToggle = document.getElementById('toggle-sidebar');
-          if (sidebarToggle && sidebarToggle.checked) {
-            sidebarToggle.checked = false;
-          }
+          this.closeChat();
+          this.closeSidebar();
         }
       }
 
       handleOutsideClick(e) {
-        // Close sidebar if clicking outside
+        // Close sidebar if clicking outside panel and not on the open button
         const sidebar = document.querySelector('.sidebar');
-        const sidebarToggle = document.getElementById('toggle-sidebar');
-        
-        if (sidebar && sidebarToggle && sidebarToggle.checked) {
-          if (!sidebar.contains(e.target) && !e.target.closest('.sidebar')) {
-            sidebarToggle.checked = false;
+        if (document.body.classList.contains('sidebar-open')) {
+          if (!sidebar.contains(e.target) && !e.target.closest('#open-sidebar')) {
+            this.closeSidebar();
           }
         }
 
-        // Close chat if clicking outside
+        // Close chat if clicking outside panel and not on the open button
         const chat = document.querySelector('.chat');
-        const chatToggle = document.getElementById('toggle-chat');
-        
-        if (chat && chatToggle && chatToggle.checked) {
-          if (!chat.contains(e.target) && !e.target.closest('.chat')) {
-            chatToggle.checked = false;
+        if (document.body.classList.contains('chat-open')) {
+          if (!chat.contains(e.target) && !e.target.closest('#open-chat')) {
+            this.closeChat();
           }
         }
 
@@ -1346,16 +1648,14 @@
         }
 
         // Close chat
-        const chatToggle = document.getElementById('toggle-chat');
-        if (chatToggle && chatToggle.checked) {
-          chatToggle.checked = false;
+        if (document.body.classList.contains('chat-open')) {
+          this.closeChat();
           return;
         }
 
         // Close sidebar
-        const sidebarToggle = document.getElementById('toggle-sidebar');
-        if (sidebarToggle && sidebarToggle.checked) {
-          sidebarToggle.checked = false;
+        if (document.body.classList.contains('sidebar-open')) {
+          this.closeSidebar();
           return;
         }
       }
