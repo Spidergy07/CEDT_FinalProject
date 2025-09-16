@@ -378,6 +378,7 @@
         this.currentYear = 'Year 1-1';
         this.currentSubject = null;
         this.currentPdf = null;
+        this.currentFileTree = [];
         this.pdfDoc = null;
         this.currentPage = 1;
         this.totalPages = 0;
@@ -388,6 +389,10 @@
         this.dragStart = { x: 0, y: 0 };
         this.touchStart = { x: 0, y: 0 };
         this.lastTouchTime = 0;
+        // Panning state for zoomed canvas
+        this.isPanning = false;
+        this.panStart = { x: 0, y: 0 };
+        this.scrollStart = { left: 0, top: 0 };
         
         // Zoom Window properties
         this.zoomWindowActive = false;
@@ -502,6 +507,8 @@
             this.handleChatSubmit();
           });
         }
+
+        // No global toggle for sources; indicator with popover handled per message
 
         // Chat scroll functionality
         const chatBody = document.querySelector('.chat-body');
@@ -653,14 +660,14 @@
 
         try {
           // Call the search-and-answer API
-          const response = await fetch(`${this.apiBaseUrl}/search-and-answer`, {
+          const response = await fetch(`${this.apiBaseUrl}/search-and-answer-multi`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               question: question,
-              topK: 4
+              topK: 6
             })
           });
 
@@ -669,10 +676,17 @@
           }
 
           const data = await response.json();
-          
+
           // Display the answer
           this.hideTypingIndicator();
           this.addMessage('ai', data.answer.answer);
+          // Add sources (images used) under the AI message
+          if (data && data.answer && Array.isArray(data.answer.imagePaths) && data.answer.imagePaths.length) {
+            this.addSources(data.answer.imagePaths);
+          } else if (data && data.search && Array.isArray(data.search.topResults)) {
+            const fallback = data.search.topResults.map(r => r.imagePath).filter(Boolean);
+            if (fallback.length) this.addSources(fallback);
+          }
           
           // Update chat history
           this.chatHistory.push({
@@ -687,6 +701,196 @@
           this.addMessage('ai', 'ขออภัย เกิดข้อผิดพลาดในการประมวลผลคำถาม กรุณาลองใหม่อีกครั้ง');
         } finally {
           this.setLoading(false);
+        }
+      }
+
+      // Render chips into a container
+      renderSourceChips(container, unique) {
+        const title = document.createElement('div');
+        title.className = 'sources-title';
+        title.textContent = `แหล่งที่มา (${unique.length})`;
+        container.appendChild(title);
+
+        unique.slice(0, 6).forEach((imgPath) => {
+          const info = this.parseImageInfo(imgPath);
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'source-chip';
+          chip.title = `${info.base}${info.page ? ` — page ${info.page}` : ''}`;
+          chip.innerHTML = `
+            <span class="icon">🖼️</span>
+            <span class="label">${info.baseShort}</span>
+            ${info.page ? `<span class="page-badge">p.${info.page}</span>` : ''}
+          `;
+          chip.addEventListener('click', () => this.openPdfFromImagePath(imgPath));
+          container.appendChild(chip);
+        });
+      }
+
+      // Add clickable source chips under the last AI message
+      addSources(imagePaths) {
+        try {
+          const chatBody = document.querySelector('.chat-body');
+          const lastAi = Array.from(chatBody.querySelectorAll('.msg.ai')).pop();
+          if (!lastAi) return;
+          const bubble = lastAi.querySelector('.bubble');
+          if (!bubble) return;
+
+          // Unique sources
+          const unique = Array.from(new Set(imagePaths));
+
+          // Compact indicator with count
+          const indicator = document.createElement('button');
+          indicator.type = 'button';
+          indicator.className = 'sources-indicator';
+          indicator.title = 'แหล่งอ้างอิง';
+          indicator.innerHTML = `<span class=\"icon\">📎</span><span class=\"count\">${unique.length}</span>`;
+
+          // Popover with chips
+          const popover = document.createElement('div');
+          popover.className = 'sources-popover';
+          this.renderSourceChips(popover, unique);
+
+          bubble.appendChild(indicator);
+          bubble.appendChild(popover);
+
+          // Hover open/close
+          let hoverTimer;
+          const openPopover = () => popover.classList.add('open');
+          const closePopover = () => popover.classList.remove('open');
+          indicator.addEventListener('mouseenter', () => { clearTimeout(hoverTimer); openPopover(); });
+          indicator.addEventListener('mouseleave', () => { hoverTimer = setTimeout(closePopover, 120); });
+          popover.addEventListener('mouseenter', () => { clearTimeout(hoverTimer); openPopover(); });
+          popover.addEventListener('mouseleave', () => { hoverTimer = setTimeout(closePopover, 120); });
+
+          // Click toggle (for touch devices)
+          indicator.addEventListener('click', (e) => { e.stopPropagation(); popover.classList.toggle('open'); });
+          document.addEventListener('click', (e) => { if (!popover.contains(e.target) && !indicator.contains(e.target)) closePopover(); });
+
+          this.scrollToBottom();
+        } catch (e) {
+          console.warn('addSources failed:', e);
+        }
+      }
+
+      // Parse info from an image path like: .../Some_Doc-333-12345/Some_Doc-333-12345_page_7.png
+      parseImageInfo(imagePath) {
+        const filename = (imagePath.split('/').pop() || '').replace(/%20/g, ' ');
+        const dir = (imagePath.split('/').slice(-2, -1)[0] || '').replace(/%20/g, ' ');
+        const pageMatch = filename.match(/_page_(\d+)\.png$/i);
+        const page = pageMatch ? parseInt(pageMatch[1], 10) : null;
+        // base candidate from directory name (more stable than file name)
+        let base = dir || filename.replace(/_page_\d+\.png$/i, '');
+        // strip trailing -digits-digits if present
+        base = base.replace(/-\d+-\d+$/, '');
+        const baseShort = base.length > 36 ? base.slice(0, 33) + '…' : base;
+        return { filename, dir, page, base, baseShort };
+      }
+
+      // Try to open the PDF that produced this image and jump to page
+      async openPdfFromImagePath(imagePath) {
+        const info = this.parseImageInfo(imagePath);
+
+        // Helper: normalize text for fuzzy match
+        const normalize = (s) => (s || '').toLowerCase().replace(/[\s_\-]+/g, '');
+        const needle = normalize(info.base);
+
+        // Helper: search recursively inside a file tree
+        const findPdfInTree = (nodes) => {
+          for (const n of nodes || []) {
+            if (n.type === 'folder') {
+              const found = findPdfInTree(n.children || []);
+              if (found) return found;
+            } else if (n.type === 'file') {
+              const nameNoExt = n.name.replace(/\.pdf$/i, '');
+              const hay = normalize(nameNoExt);
+              if (hay.includes(needle) || needle.includes(hay)) return n;
+            }
+          }
+          return null;
+        };
+
+        // Helper: ensure UI selection reflects the subject
+        const activateSubjectUI = (subject) => {
+          // Activate current year panel
+          const yearItems = Array.from(document.querySelectorAll('.year-item'));
+          yearItems.forEach((el) => el.classList.remove('active'));
+          const yearEl = document.querySelector(`.year-item[data-year="${this.currentYear}"]`);
+          if (yearEl) yearEl.classList.add('active');
+          // Toggle subject highlight
+          document.querySelectorAll('.subject-item').forEach(el => el.classList.remove('active'));
+          const subjEl = document.querySelector(`.subject-item[data-subject="${subject}"]`);
+          if (subjEl) subjEl.classList.add('active');
+        };
+
+        // Ensure we have a current year (default already set in constructor)
+        if (!this.currentYear) this.currentYear = 'Year 1-1';
+
+        // Step 1: Try current subject first (if any)
+        let found = null;
+        let foundSubject = this.currentSubject || null;
+
+        if (this.currentSubject) {
+          if (!Array.isArray(this.currentFileTree) || this.currentFileTree.length === 0) {
+            await this.loadFilesForSubject(this.currentSubject);
+          }
+          found = findPdfInTree(this.currentFileTree || []);
+        }
+
+        // Step 2: If not found or no subject selected, search across all subjects in current year
+        if (!found) {
+          // Build subject list under the active/current year
+          const yearEl = document.querySelector(`.year-item[data-year="${this.currentYear}"]`);
+          const subjectEls = yearEl ? Array.from(yearEl.querySelectorAll('.subject-item')) : [];
+          const subjects = subjectEls.map(el => el.getAttribute('data-subject'));
+
+          for (const subject of subjects) {
+            if (subject === this.currentSubject) continue;
+            try {
+              await this.loadFilesForSubject(subject);
+              const candidate = findPdfInTree(this.currentFileTree || []);
+              if (candidate) {
+                found = candidate;
+                foundSubject = subject;
+                break;
+              }
+            } catch (e) {
+              console.warn('Failed loading files for subject', subject, e);
+            }
+          }
+        }
+
+        if (!found) {
+          this.addMessage('ai', `หาไฟล์ PDF ที่สอดคล้องกับ "${info.base}" ไม่พบในปี ${this.currentYear}${this.currentSubject ? ` (วิชา ${this.currentSubject})` : ''}`);
+          return;
+        }
+
+        // Switch current subject if needed so viewer endpoints resolve correctly
+        if (foundSubject && foundSubject !== this.currentSubject) {
+          this.currentSubject = foundSubject;
+          activateSubjectUI(foundSubject);
+        }
+
+        // Load PDF if different from current, then jump to page
+        const ensureLoaded = async () => {
+          const currName = this.currentPdf?.name;
+          if (!currName || currName !== found.name) {
+            await this.loadPDF(found);
+          }
+        };
+
+        try {
+          await ensureLoaded();
+          if (info.page) {
+            this.currentPage = Math.min(Math.max(1, info.page), this.totalPages || info.page);
+            await this.renderPage();
+          }
+          // Focus viewer panel on desktop
+          const viewer = document.getElementById('pdf-frame');
+          if (viewer) viewer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (e) {
+          console.error('openPdfFromImagePath error:', e);
+          this.addMessage('ai', 'ไม่สามารถเปิดหน้า PDF ที่อ้างอิงได้');
         }
       }
 
@@ -735,13 +939,108 @@
         
         const bubbleDiv = document.createElement('div');
         bubbleDiv.className = 'bubble';
-        bubbleDiv.textContent = content;
+        // Render richer, readable content (Markdown-lite + line breaks)
+        bubbleDiv.innerHTML = this.renderRichText(content);
         
         messageDiv.appendChild(bubbleDiv);
         chatBody.appendChild(messageDiv);
         
         // Smooth scroll to bottom
         this.scrollToBottom();
+      }
+
+      // Safely render simple Markdown and structure for readability
+      renderRichText(text) {
+        if (!text || typeof text !== 'string') return '';
+
+        // Escape HTML
+        let escaped = text
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;');
+
+        // Preserve fenced code blocks ```code```
+        const codeBlocks = [];
+        escaped = escaped.replace(/```[\s\S]*?```/g, (block) => {
+          const inner = block.slice(3, -3); // remove backticks
+          const placeholder = `__CODEBLOCK_${codeBlocks.length}__`;
+          codeBlocks.push(inner.trim());
+          return placeholder;
+        });
+
+        // Headings (#, ##, ###) at line start
+        escaped = escaped
+          .replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
+          .replace(/^##\s+(.+)$/gm, '<h2>$1</h2>')
+          .replace(/^#\s+(.+)$/gm, '<h1>$1</h1>');
+
+        // Bold and italic
+        escaped = escaped
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.+?)\*/g, '<em>$1</em>')
+          .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+        // Build lists and paragraphs
+        const lines = escaped.split(/\n+/);
+        const htmlParts = [];
+        let listMode = null; // 'ul' | 'ol'
+        let listItems = [];
+
+        const flushList = () => {
+          if (listMode && listItems.length) {
+            htmlParts.push(`<${listMode}>` + listItems.map(li => `<li>${li}</li>`).join('') + `</${listMode}>`);
+          }
+          listMode = null;
+          listItems = [];
+        };
+
+        for (const rawLine of lines) {
+          const line = rawLine.trimEnd();
+          if (!line.trim()) { // paragraph break
+            flushList();
+            continue;
+          }
+
+          // Ordered list: 1. item
+          const olMatch = line.match(/^\d+\.\s+(.*)$/);
+          if (olMatch) {
+            const item = olMatch[1];
+            if (listMode && listMode !== 'ol') flushList();
+            listMode = 'ol';
+            listItems.push(item);
+            continue;
+          }
+
+          // Unordered list: - item or • item
+          const ulMatch = line.match(/^(?:[-\u2022])\s+(.*)$/);
+          if (ulMatch) {
+            const item = ulMatch[1];
+            if (listMode && listMode !== 'ul') flushList();
+            listMode = 'ul';
+            listItems.push(item);
+            continue;
+          }
+
+          // Not a list line
+          flushList();
+          // Convert remaining single line to paragraph or keep as is if already a heading
+          if (/^<h[1-3]>/.test(line)) {
+            htmlParts.push(line);
+          } else {
+            htmlParts.push(`<p>${line}</p>`);
+          }
+        }
+        flushList();
+
+        let html = htmlParts.join('\n');
+
+        // Restore fenced code blocks
+        html = html.replace(/__CODEBLOCK_(\d+)__/g, (_, idx) => {
+          const code = (codeBlocks[Number(idx)] || '').replace(/\n/g, '\n');
+          return `<pre><code>${code}</code></pre>`;
+        });
+
+        return html;
       }
 
       scrollToBottom() {
@@ -879,6 +1178,8 @@
 
       displayFileTree(fileTree) {
         console.log('Displaying file tree:', fileTree);
+        // cache for lookup when resolving sources
+        this.currentFileTree = Array.isArray(fileTree) ? fileTree : [];
         const filesList = document.getElementById('files-list');
         filesList.innerHTML = '';
         
@@ -1033,6 +1334,8 @@
           this.currentPdf = file;
           
           await this.renderPage();
+          // Start with a comfortable default zoom
+          await this.fitToWidth();
           this.hidePDFLoading();
           
         } catch (error) {
@@ -1053,6 +1356,9 @@
         
         canvas.height = viewport.height;
         canvas.width = viewport.width;
+        // Keep CSS size in sync so zoom reflects intrinsic canvas size
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
         
         const renderContext = {
           canvasContext: context,
@@ -1065,6 +1371,13 @@
         this.updatePageInfo();
         this.updateZoomLevel();
         this.updateNavigationButtons();
+
+        // Update pannability cursor based on overflow
+        const container = document.getElementById('pdf-container');
+        if (container) {
+          const canPan = (container.scrollWidth > container.clientWidth) || (container.scrollHeight > container.clientHeight);
+          container.style.cursor = canPan ? 'grab' : 'default';
+        }
       }
 
       async nextPage() {
@@ -1210,22 +1523,36 @@
       }
 
       handleMouseDown(e) {
-        if (e.target.id === 'pdf-canvas') {
-          this.isDragging = true;
-          this.dragStart = { x: e.clientX, y: e.clientY };
+        const container = document.getElementById('pdf-container');
+        if (!container) return;
+        const within = container.contains(e.target);
+        if (within) {
+          // Begin panning
+          this.isPanning = true;
+          this.panStart = { x: e.clientX, y: e.clientY };
+          this.scrollStart = { left: container.scrollLeft, top: container.scrollTop };
+          container.style.cursor = 'grabbing';
           e.preventDefault();
         }
       }
 
       handleMouseMove(e) {
-        if (this.isDragging) {
+        if (this.isPanning) {
+          const container = document.getElementById('pdf-container');
+          if (!container) return;
+          const dx = e.clientX - this.panStart.x;
+          const dy = e.clientY - this.panStart.y;
+          container.scrollLeft = this.scrollStart.left - dx;
+          container.scrollTop = this.scrollStart.top - dy;
           e.preventDefault();
         }
       }
 
       handleMouseUp(e) {
-        if (this.isDragging) {
-          this.isDragging = false;
+        if (this.isPanning) {
+          const container = document.getElementById('pdf-container');
+          if (container) container.style.cursor = 'grab';
+          this.isPanning = false;
           e.preventDefault();
         }
       }
@@ -1241,10 +1568,19 @@
       }
 
       handleTouchStart(e) {
+        const container = document.getElementById('pdf-container');
         if (e.touches.length === 1) {
           const touch = e.touches[0];
           this.touchStart = { x: touch.clientX, y: touch.clientY };
           this.lastTouchTime = Date.now();
+          if (container) {
+            const canPan = (container.scrollWidth > container.clientWidth) || (container.scrollHeight > container.clientHeight);
+            if (canPan) {
+              this.isPanning = true;
+              this.panStart = { x: touch.clientX, y: touch.clientY };
+              this.scrollStart = { left: container.scrollLeft, top: container.scrollTop };
+            }
+          }
         } else if (e.touches.length === 2) {
           // Two finger pinch
           e.preventDefault();
@@ -1252,12 +1588,20 @@
       }
 
       handleTouchMove(e) {
+        const container = document.getElementById('pdf-container');
         if (e.touches.length === 1) {
           const touch = e.touches[0];
+          if (this.isPanning && container) {
+            const dx = touch.clientX - this.panStart.x;
+            const dy = touch.clientY - this.panStart.y;
+            container.scrollLeft = this.scrollStart.left - dx;
+            container.scrollTop = this.scrollStart.top - dy;
+            e.preventDefault();
+            return;
+          }
+          // If not panning, allow swipe to change page
           const deltaX = touch.clientX - this.touchStart.x;
           const deltaY = touch.clientY - this.touchStart.y;
-          
-          // Swipe left/right for page navigation
           if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
             e.preventDefault();
             if (deltaX > 0) {
@@ -1288,6 +1632,9 @@
 
       handleTouchEnd(e) {
         this.lastPinchDistance = null;
+        if (this.isPanning) {
+          this.isPanning = false;
+        }
         
         // Double tap to fit to width
         if (e.touches.length === 0) {
@@ -1298,33 +1645,33 @@
         }
       }
 
-      fitToWidth() {
+      async fitToWidth() {
         const pdfFrame = document.getElementById('pdf-frame');
         const frameWidth = pdfFrame.clientWidth - 40; // Account for padding
         const canvas = document.getElementById('pdf-canvas');
         
         if (this.pdfDoc && canvas) {
-          const page = this.pdfDoc.getPage(this.currentPage);
+          const page = await this.pdfDoc.getPage(this.currentPage);
           const viewport = page.getViewport({ scale: 1.0 });
           this.scale = frameWidth / viewport.width;
           this.scale = Math.max(this.minScale, Math.min(this.maxScale, this.scale));
-          this.renderPage();
+          await this.renderPage();
         }
       }
 
-      fitToPage() {
+      async fitToPage() {
         const pdfFrame = document.getElementById('pdf-frame');
         const frameWidth = pdfFrame.clientWidth - 40;
         const frameHeight = pdfFrame.clientHeight - 100; // Account for controls
         
         if (this.pdfDoc) {
-          const page = this.pdfDoc.getPage(this.currentPage);
+          const page = await this.pdfDoc.getPage(this.currentPage);
           const viewport = page.getViewport({ scale: 1.0 });
           const scaleX = frameWidth / viewport.width;
           const scaleY = frameHeight / viewport.height;
           this.scale = Math.min(scaleX, scaleY);
           this.scale = Math.max(this.minScale, Math.min(this.maxScale, this.scale));
-          this.renderPage();
+          await this.renderPage();
         }
       }
 
