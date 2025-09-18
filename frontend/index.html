@@ -240,6 +240,13 @@
                   </select>
                 </div>
               </div>
+              
+              <div class="settings-section">
+                <h5>Admin Settings</h5>
+                <div class="setting-group">
+                  <button class="danger-btn" id="clear-all-data-btn" title="ลบข้อมูลทั้งหมดในระบบ">🗑️ ลบข้อมูลทั้งหมด</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1243,12 +1250,17 @@
               <span class="tree-icon">📄</span>
               <span class="tree-name">${item.name}</span>
               <span class="tree-meta">${this.formatFileSize(item.size)}</span>
+              <button class="delete-file-btn" title="ลบไฟล์" data-filename="${item.name}">🗑️</button>
             </div>
           `;
           
           // Add click handler for file selection
           const content = li.querySelector('.tree-item-content');
           content.addEventListener('click', (e) => {
+            // Don't trigger file selection if delete button was clicked
+            if (e.target.classList.contains('delete-file-btn')) {
+              return;
+            }
             e.stopPropagation();
             e.preventDefault();
             console.log('File clicked:', item.name, 'Path:', item.path);
@@ -1257,10 +1269,22 @@
           
           // Add touch handler for iPad compatibility
           content.addEventListener('touchend', (e) => {
+            // Don't trigger file selection if delete button was clicked
+            if (e.target.classList.contains('delete-file-btn')) {
+              return;
+            }
             e.stopPropagation();
             e.preventDefault();
             console.log('File touched:', item.name, 'Path:', item.path);
             this.selectFile(li, item);
+          });
+
+          // Add delete button handler
+          const deleteBtn = li.querySelector('.delete-file-btn');
+          deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            this.deleteFile(item);
           });
         }
         
@@ -1342,6 +1366,127 @@
           console.error('Error loading PDF:', error);
           this.hidePDFLoading();
           this.addMessage('ai', 'เกิดข้อผิดพลาดในการโหลด PDF กรุณาลองใหม่อีกครั้ง');
+        }
+      }
+
+      async deleteFile(file) {
+        // Show confirmation dialog
+        const confirmed = confirm(`คุณต้องการลบไฟล์ "${file.name}" หรือไม่?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`);
+        
+        if (!confirmed) {
+          return;
+        }
+
+        try {
+          console.log('Deleting file:', file.name);
+          
+          // Call the delete API endpoint
+          const response = await fetch(`${this.apiBaseUrl}/api/delete/file`, {
+            method: 'DELETE',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              year: this.currentYear,
+              subject: this.currentSubject,
+              filename: file.name
+            })
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+          }
+
+          const result = await response.json();
+          console.log('Delete result:', result);
+
+          // Show success message
+          this.addMessage('ai', `ลบไฟล์ "${file.name}" เรียบร้อยแล้ว`);
+
+          // Refresh the file list
+          await this.loadFilesForSubject(this.currentSubject);
+
+          // If the deleted file was currently displayed, clear the viewer
+          if (this.currentPdf && this.currentPdf.name === file.name) {
+            this.clearPDFViewer();
+          }
+
+        } catch (error) {
+          console.error('Error deleting file:', error);
+          this.addMessage('ai', `เกิดข้อผิดพลาดในการลบไฟล์: ${error.message}`);
+        }
+      }
+
+      clearPDFViewer() {
+        // Clear the PDF viewer
+        const canvas = document.getElementById('pdf-canvas');
+        if (canvas) {
+          const context = canvas.getContext('2d');
+          context.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Reset PDF-related state
+        this.pdfDoc = null;
+        this.currentPdf = null;
+        this.currentPage = 1;
+        this.scale = 1;
+
+        // Update document title
+        const docTitle = document.querySelector('.doc-title');
+        if (docTitle) {
+          docTitle.textContent = 'เลือกไฟล์เพื่อดู';
+        }
+
+        // Update UI controls
+        this.updatePageInfo();
+        this.updateZoomLevel();
+        this.updateNavigationButtons();
+      }
+
+      async clearAllData() {
+        // Show confirmation dialog
+        const confirmed = confirm('คุณต้องการลบข้อมูลทั้งหมดหรือไม่?\n\nการดำเนินการนี้จะลบไฟล์และข้อมูลทั้งหมดในระบบ และไม่สามารถย้อนกลับได้');
+        
+        if (!confirmed) {
+          return;
+        }
+
+        try {
+          console.log('Clearing all data...');
+          
+          // Call the clear all API endpoint
+          const response = await fetch(`${this.apiBaseUrl}/api/delete/all`, {
+            method: 'DELETE',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+          }
+
+          const result = await response.json();
+          console.log('Clear all result:', result);
+
+          // Show success message
+          this.addMessage('ai', 'ลบข้อมูลทั้งหมดเรียบร้อยแล้ว');
+
+          // Clear the current view
+          this.clearPDFViewer();
+          this.clearFilesList();
+
+          // Reset current selections
+          this.currentSubject = null;
+          this.currentYear = new Date().getFullYear() + 543; // Reset to current year
+
+        } catch (error) {
+          console.error('Error clearing all data:', error);
+          this.addMessage('ai', `เกิดข้อผิดพลาดในการลบข้อมูล: ${error.message}`);
         }
       }
 
@@ -2332,6 +2477,7 @@
         const settingsPanel = document.getElementById('zoom-window-settings-panel');
         const pressureSensitivity = document.getElementById('pressure-sensitivity');
         const handwritingRecognition = document.getElementById('handwriting-recognition');
+        const clearAllDataBtn = document.getElementById('clear-all-data-btn');
 
         if (settingsBtn && settingsPanel) {
           settingsBtn.addEventListener('click', () => {
@@ -2349,6 +2495,12 @@
         if (handwritingRecognition) {
           handwritingRecognition.addEventListener('change', (e) => {
             this.handwritingRecognition = e.target.checked;
+          });
+        }
+
+        if (clearAllDataBtn) {
+          clearAllDataBtn.addEventListener('click', () => {
+            this.clearAllData();
           });
         }
       }

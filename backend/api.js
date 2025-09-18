@@ -581,6 +581,108 @@ app.get('/api/pdf/:year/:subject', (req, res) => {
   }
 });
 
+// DELETE endpoint to remove specific file from embeddings
+app.delete('/api/files/:year/:subject/:filename', (req, res) => {
+  try {
+    const { year, subject, filename } = req.params;
+    const decodedFilename = decodeURIComponent(filename);
+    
+    // Find and remove from imgPaths array
+    const pathPattern = `${year}_${subject}`;
+    const indexToRemove = imgPaths.findIndex(path => 
+      path.includes(pathPattern) && path.includes(decodedFilename)
+    );
+    
+    if (indexToRemove === -1) {
+      return res.status(404).json({ 
+        error: 'File not found in embeddings',
+        filename: decodedFilename 
+      });
+    }
+    
+    // Remove from arrays
+    imgPaths.splice(indexToRemove, 1);
+    if (docEmbeddings && docEmbeddings.length > indexToRemove) {
+      docEmbeddings.splice(indexToRemove, 1);
+    }
+    
+    // Update the files on disk
+    const pathsFile = path.join(__dirname, 'processed_image_paths.txt');
+    fs.writeFileSync(pathsFile, imgPaths.join('\n'));
+    
+    const embeddingsPath = path.join(__dirname, 'pdf_image_embeddings.json');
+    if (docEmbeddings) {
+      fs.writeFileSync(embeddingsPath, JSON.stringify(docEmbeddings));
+    }
+    
+    console.log(`Deleted file: ${decodedFilename} from embeddings`);
+    res.json({ 
+      message: 'File deleted successfully',
+      filename: decodedFilename,
+      remainingFiles: imgPaths.length
+    });
+    
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE endpoint to clear all embeddings data
+app.delete('/api/embeddings/clear', (req, res) => {
+  try {
+    // Clear in-memory data
+    docEmbeddings = null;
+    imgPaths = [];
+    
+    // Clear files on disk
+    const pathsFile = path.join(__dirname, 'processed_image_paths.txt');
+    const embeddingsPath = path.join(__dirname, 'pdf_image_embeddings.json');
+    
+    fs.writeFileSync(pathsFile, '');
+    fs.writeFileSync(embeddingsPath, '[]');
+    
+    console.log('All embeddings data cleared');
+    res.json({ 
+      message: 'All embeddings data cleared successfully',
+      clearedFiles: 0
+    });
+    
+  } catch (error) {
+    console.error('Error clearing embeddings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE endpoint to remove physical PDF images folder
+app.delete('/api/images/:year/:subject/:folder', (req, res) => {
+  try {
+    const { year, subject, folder } = req.params;
+    const decodedFolder = decodeURIComponent(folder);
+    const folderPath = path.join(__dirname, 'pdf_images', `${year}_${subject}_${decodedFolder}`);
+    
+    if (!fs.existsSync(folderPath)) {
+      return res.status(404).json({ 
+        error: 'Image folder not found',
+        folder: decodedFolder 
+      });
+    }
+    
+    // Remove the entire folder recursively
+    fs.rmSync(folderPath, { recursive: true, force: true });
+    
+    console.log(`Deleted image folder: ${folderPath}`);
+    res.json({ 
+      message: 'Image folder deleted successfully',
+      folder: decodedFolder
+    });
+    
+  } catch (error) {
+    console.error('Error deleting image folder:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Root route to serve the frontend
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/index.html'));

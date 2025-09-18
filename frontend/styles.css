@@ -2686,3 +2686,74 @@
     body.sidebar-hidden .resizer-left { display:none !important; }
     body.chat-hidden .resizer-right { display:none !important; }
   }
+
+/* Delete File Button Styles */
+.delete-file-btn {
+  background: none;
+  border: none;
+  color: #ff4444;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-left: auto;
+  opacity: 0;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+}
+
+.delete-file-btn:hover {
+  background: rgba(255, 68, 68, 0.1);
+  color: #ff6666;
+  transform: scale(1.1);
+}
+
+.tree-item:hover .delete-file-btn {
+  opacity: 1;
+}
+
+.tree-item-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.tree-item-content:hover {
+  background: rgba(91, 140, 255, 0.1);
+}
+
+/* Danger Button Styles */
+.danger-btn {
+  background: linear-gradient(135deg, #ff4444, #cc3333);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  justify-content: center;
+}
+
+.danger-btn:hover {
+  background: linear-gradient(135deg, #ff6666, #ee4444);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
+}
+
+.danger-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(255, 68, 68, 0.3);
+}
